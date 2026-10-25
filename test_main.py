@@ -134,3 +134,82 @@ def test_prediction_matches_probability_threshold():
     else:
         assert prediction == "No"
 
+def test_priority_endpoint_classifies_hacked_account_as_high():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "My account has been hacked and someone "
+                "accessed my personal data."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+
+    result = response.json()
+
+    assert result["priority"] == "High"
+    assert result["classification_method"] == (
+        "Rule-based keyword matching"
+    )
+
+def test_priority_endpoint_classifies_billing_issue_as_medium():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "I was charged twice for my subscription "
+                "and need a refund."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "Medium"
+
+def test_priority_endpoint_classifies_profile_question_as_low():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "How can I change the display name on my profile?"
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "Low"
+
+def test_priority_endpoint_rejects_short_description():
+    response = client.post(
+        "/priority",
+        json={"issue_description": "Hi"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_priority_endpoint_rejects_long_description():
+    response = client.post(
+        "/priority",
+        json={"issue_description": "A" * 5001},
+    )
+
+    assert response.status_code == 422
+
+def test_priority_endpoint_rejects_missing_description():
+    response = client.post(
+        "/priority",
+        json={},
+    )
+
+    assert response.status_code == 422
+
+def test_priority_endpoint_rejects_whitespace_only_description():
+    response = client.post(
+        "/priority",
+        json={"issue_description": "     "},
+    )
+
+    assert response.status_code == 422

@@ -3,14 +3,16 @@ from pathlib import Path
 
 import joblib
 from fastapi import FastAPI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
 
 # 1. Create the FastAPI application
 app = FastAPI(
     title="ResolveAI API",
     description="AI-powered customer operations copilot",
-    version="0.1.0",
+    version="0.2.0",
 )
+
 
 # 2. Load the saved machine-learning model
 MODEL_PATH = (
@@ -22,11 +24,7 @@ MODEL_PATH = (
 model = joblib.load(MODEL_PATH)
 
 
-# 3. Validate incoming ticket descriptions
-
-from pydantic import BaseModel, Field, field_validator
-
-
+# 3. Shared validation for ticket descriptions
 class TicketRequest(BaseModel):
     issue_description: str = Field(
         min_length=5,
@@ -40,10 +38,16 @@ class TicketRequest(BaseModel):
         value = value.strip()
 
         if not value:
-            raise ValueError("Issue description cannot be empty or whitespace")
+            raise ValueError(
+                "Issue description cannot be empty or whitespace"
+            )
 
         return value
 
+
+# Separate request schema for priority classification
+class PriorityRequest(TicketRequest):
+    pass
 
 
 # 4. Check whether the API is running
@@ -67,7 +71,7 @@ def model_health_check():
 # 6. Predict whether a ticket may require escalation
 @app.post("/predict")
 def predict_escalation(request: TicketRequest):
-    description = request.issue_description.strip()
+    description = request.issue_description
 
     probabilities = model.predict_proba([description])[0]
 
@@ -75,7 +79,7 @@ def predict_escalation(request: TicketRequest):
     yes_column = list(model.classes_).index("Yes")
     escalation_probability = float(probabilities[yes_column])
 
-    # Use the 0.40 threshold from our baseline experiment
+    # Baseline decision threshold
     threshold = 0.40
 
     prediction = (
@@ -95,17 +99,59 @@ def predict_escalation(request: TicketRequest):
     }
 
 
-def test_predict_trims_description_whitespace():
-    response = client.post(
-        "/predict",
-        json={
-            "issue_description": (
-                "   I was charged twice for my subscription.   "
-            )
-        },
-    )
+# 7. Classify ticket priority using local rules
+@app.post("/priority")
+def classify_priority(request: PriorityRequest):
+    description = request.issue_description.lower()
 
-    assert response.status_code == 200
-    assert response.json()["issue_description"] == (
-        "I was charged twice for my subscription."
-    )
+    high_priority_keywords = [
+        "security breach",
+        "data breach",
+        "account hacked",
+        "account has been hacked",
+        "hacked",
+        "fraud",
+        "unauthorized access",
+        "payment stolen",
+        "service outage",
+        "system down",
+        "cannot access my account",
+    ]
+
+    medium_priority_keywords = [
+        "refund",
+        "charged twice",
+        "payment failed",
+        "billing issue",
+        "unable to log in",
+        "login issue",
+        "order delayed",
+        "subscription cancelled",
+    ]
+
+    if any(
+        keyword in description
+        for keyword in high_priority_keywords
+    ):
+        priority = "High"
+        reason = "The ticket contains a high-urgency keyword."
+
+    elif any(
+        keyword in description
+        for keyword in medium_priority_keywords
+    ):
+        priority = "Medium"
+        reason = "The ticket contains a moderate-urgency keyword."
+
+    else:
+        priority = "Low"
+        reason = (
+            "No configured high- or medium-urgency keyword was found."
+        )
+
+    return {
+        "issue_description": request.issue_description,
+        "priority": priority,
+        "reason": reason,
+        "classification_method": "Rule-based keyword matching",
+    }
