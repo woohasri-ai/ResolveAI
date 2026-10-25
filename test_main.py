@@ -226,3 +226,18 @@ def test_priority_endpoint_does_not_flag_negated_hacking_as_high():
 
     assert response.status_code == 200
     assert response.json()["priority"] == "Low"
+    
+
+def test_priority_endpoint_still_flags_genuine_security_breach_as_high():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "There has been a security breach "
+                "and customer data was exposed."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "High"
