@@ -307,4 +307,16 @@ def test_priority_endpoint_classifies_platform_down_as_high():
 
     assert response.status_code == 200
     assert response.json()["priority"] == "High"   
-    
+def test_priority_endpoint_does_not_flag_platform_not_down_as_high():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "The platform is not down; I have a question "
+                "about my profile."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "Low"   
