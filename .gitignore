@@ -1,0 +1,24 @@
+
+# Python virtual environments
+.venv/
+.venv-1/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Dataset files
+Data/*.parquet
+
+# Trained model artifacts
+Data/*.joblib
