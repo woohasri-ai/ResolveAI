@@ -333,3 +333,15 @@ def test_priority_endpoint_classifies_customers_unable_to_use_service_as_high():
 
     assert response.status_code == 200
     assert response.json()["priority"] == "High"
+def test_priority_endpoint_prefers_high_over_medium_signals():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "The service is unavailable and I was charged twice."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "High"
