@@ -357,3 +357,17 @@ def test_priority_endpoint_classifies_team_unable_to_access_application_as_high(
 
     assert response.status_code == 200
     assert response.json()["priority"] == "High"
+
+def test_priority_endpoint_classifies_double_charge_as_medium():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "I was charged twice for my subscription, "
+                "and the payment is still pending."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "Medium"
