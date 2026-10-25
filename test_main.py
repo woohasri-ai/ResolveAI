@@ -213,3 +213,16 @@ def test_priority_endpoint_rejects_whitespace_only_description():
     )
 
     assert response.status_code == 422
+def test_priority_endpoint_does_not_flag_negated_hacking_as_high():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "My account was not hacked. "
+                "I just want to update my profile."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "Low"

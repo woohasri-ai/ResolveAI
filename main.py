@@ -129,9 +129,31 @@ def classify_priority(request: PriorityRequest):
         "subscription cancelled",
     ]
 
-    if any(
+    # Common phrases that negate security-related incidents
+    negation_phrases = [
+        "not hacked",
+        "was not hacked",
+        "has not been hacked",
+        "never hacked",
+        "no security breach",
+        "no data breach",
+        "not a fraud",
+        "no unauthorized access",
+    ]
+
+    has_negated_security_keyword = any(
+        phrase in description
+        for phrase in negation_phrases
+    )
+
+    has_high_priority_keyword = any(
         keyword in description
         for keyword in high_priority_keywords
+    )
+
+    if (
+        has_high_priority_keyword
+        and not has_negated_security_keyword
     ):
         priority = "High"
         reason = "The ticket contains a high-urgency keyword."
