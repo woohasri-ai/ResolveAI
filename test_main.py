@@ -241,3 +241,17 @@ def test_priority_endpoint_still_flags_genuine_security_breach_as_high():
 
     assert response.status_code == 200
     assert response.json()["priority"] == "High"
+
+def test_priority_endpoint_classifies_negated_security_with_billing_as_medium():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "My account was not hacked, but I was "
+                "charged twice and need a refund."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "Medium"
