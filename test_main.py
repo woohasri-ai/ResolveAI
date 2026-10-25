@@ -255,3 +255,17 @@ def test_priority_endpoint_classifies_negated_security_with_billing_as_medium():
 
     assert response.status_code == 200
     assert response.json()["priority"] == "Medium"
+
+def test_priority_endpoint_does_not_flag_no_data_breach_as_high():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "There was no data breach. "
+                "I only need help updating my profile."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "Low"
