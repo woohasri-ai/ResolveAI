@@ -295,5 +295,16 @@ def test_priority_endpoint_classifies_unavailable_service_as_high():
 
     assert response.status_code == 200
     assert response.json()["priority"] == "High"
-    
+def test_priority_endpoint_classifies_platform_down_as_high():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "The platform is down for everyone."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "High"   
     
