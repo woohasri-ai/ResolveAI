@@ -104,7 +104,8 @@ def predict_escalation(request: TicketRequest):
 def classify_priority(request: PriorityRequest):
     description = request.issue_description.lower()
 
-    high_priority_keywords = [
+    # Security-related high-priority keywords
+    security_keywords = [
         "security breach",
         "data breach",
         "account hacked",
@@ -113,10 +114,15 @@ def classify_priority(request: PriorityRequest):
         "fraud",
         "unauthorized access",
         "payment stolen",
-        "service outage",
-        "system down",
-        "cannot access my account",
     ]
+
+    # Independent high-priority incidents
+    independent_high_priority_keywords = [
+    "service outage",
+    "service is down",
+    "system down",
+    "cannot access my account",
+]
 
     medium_priority_keywords = [
         "refund",
@@ -146,15 +152,27 @@ def classify_priority(request: PriorityRequest):
         for phrase in negation_phrases
     )
 
-    has_high_priority_keyword = any(
+    has_security_keyword = any(
         keyword in description
-        for keyword in high_priority_keywords
+        for keyword in security_keywords
     )
 
-    if (
-        has_high_priority_keyword
-        and not has_negated_security_keyword
-    ):
+    has_independent_high_priority_keyword = any(
+        keyword in description
+        for keyword in independent_high_priority_keywords
+    )
+
+    # An independent urgent incident remains High even when
+    # a separate security incident is explicitly negated.
+    has_high_priority_keyword = (
+        has_independent_high_priority_keyword
+        or (
+            has_security_keyword
+            and not has_negated_security_keyword
+        )
+    )
+
+    if has_high_priority_keyword:
         priority = "High"
         reason = "The ticket contains a high-urgency keyword."
 

@@ -269,3 +269,16 @@ def test_priority_endpoint_does_not_flag_no_data_breach_as_high():
 
     assert response.status_code == 200
     assert response.json()["priority"] == "Low"
+def test_priority_endpoint_flags_service_outage_despite_negated_breach():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "There was no data breach, "
+                "but the entire service is down."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "High"
