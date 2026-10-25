@@ -123,6 +123,7 @@ def classify_priority(request: PriorityRequest):
     "service is unavailable",
     "system down",
     "platform is down",
+    "unable to use the service",
     "cannot access my account",
 ]
 
