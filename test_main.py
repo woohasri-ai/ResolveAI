@@ -345,3 +345,15 @@ def test_priority_endpoint_prefers_high_over_medium_signals():
 
     assert response.status_code == 200
     assert response.json()["priority"] == "High"
+def test_priority_endpoint_classifies_team_unable_to_access_application_as_high():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "Our team cannot access the application."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "High"

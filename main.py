@@ -124,6 +124,7 @@ def classify_priority(request: PriorityRequest):
     "system down",
     "platform is down",
     "unable to use the service",
+    "cannot access the application",
     "cannot access my account",
 ]
 
