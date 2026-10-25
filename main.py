@@ -120,6 +120,7 @@ def classify_priority(request: PriorityRequest):
     independent_high_priority_keywords = [
     "service outage",
     "service is down",
+    "service is unavailable",
     "system down",
     "cannot access my account",
 ]

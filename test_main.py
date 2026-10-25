@@ -282,3 +282,18 @@ def test_priority_endpoint_flags_service_outage_despite_negated_breach():
 
     assert response.status_code == 200
     assert response.json()["priority"] == "High"
+    
+def test_priority_endpoint_classifies_unavailable_service_as_high():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "The service is unavailable for all customers."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "High"
+    
+    
