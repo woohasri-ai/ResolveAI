@@ -24,7 +24,53 @@ MODEL_PATH = (
 model = joblib.load(MODEL_PATH)
 
 
-# 3. Shared validation for ticket descriptions
+# 3. Priority classification rules
+SECURITY_KEYWORDS = [
+    "security breach",
+    "data breach",
+    "account hacked",
+    "account has been hacked",
+    "hacked",
+    "fraud",
+    "unauthorized access",
+    "payment stolen",
+]
+
+INDEPENDENT_HIGH_PRIORITY_KEYWORDS = [
+    "service outage",
+    "service is down",
+    "service is unavailable",
+    "system down",
+    "platform is down",
+    "unable to use the service",
+    "cannot access the application",
+    "cannot access my account",
+]
+
+MEDIUM_PRIORITY_KEYWORDS = [
+    "refund",
+    "charged twice",
+    "payment failed",
+    "billing issue",
+    "unable to log in",
+    "login issue",
+    "order delayed",
+    "subscription cancelled",
+]
+
+SECURITY_NEGATION_PHRASES = [
+    "not hacked",
+    "was not hacked",
+    "has not been hacked",
+    "never hacked",
+    "no security breach",
+    "no data breach",
+    "not a fraud",
+    "no unauthorized access",
+]
+
+
+# 4. Shared validation for ticket descriptions
 class TicketRequest(BaseModel):
     issue_description: str = Field(
         min_length=5,
@@ -50,7 +96,7 @@ class PriorityRequest(TicketRequest):
     pass
 
 
-# 4. Check whether the API is running
+# 5. Check whether the API is running
 @app.get("/health")
 def health_check():
     return {
@@ -59,7 +105,7 @@ def health_check():
     }
 
 
-# 5. Check whether the ML model is loaded
+# 6. Check whether the ML model is loaded
 @app.get("/model-health")
 def model_health_check():
     return {
@@ -68,7 +114,7 @@ def model_health_check():
     }
 
 
-# 6. Predict whether a ticket may require escalation
+# 7. Predict whether a ticket may require escalation
 @app.post("/predict")
 def predict_escalation(request: TicketRequest):
     description = request.issue_description
@@ -99,75 +145,29 @@ def predict_escalation(request: TicketRequest):
     }
 
 
-# 7. Classify ticket priority using local rules
+# 8. Classify ticket priority using local rules
 @app.post("/priority")
 def classify_priority(request: PriorityRequest):
     description = request.issue_description.lower()
 
-    # Security-related high-priority keywords
-    security_keywords = [
-        "security breach",
-        "data breach",
-        "account hacked",
-        "account has been hacked",
-        "hacked",
-        "fraud",
-        "unauthorized access",
-        "payment stolen",
-    ]
-
-    # Independent high-priority incidents
-    independent_high_priority_keywords = [
-    "service outage",
-    "service is down",
-    "service is unavailable",
-    "system down",
-    "platform is down",
-    "unable to use the service",
-    "cannot access the application",
-    "cannot access my account",
-]
-
-    medium_priority_keywords = [
-        "refund",
-        "charged twice",
-        "payment failed",
-        "billing issue",
-        "unable to log in",
-        "login issue",
-        "order delayed",
-        "subscription cancelled",
-    ]
-
-    # Common phrases that negate security-related incidents
-    negation_phrases = [
-        "not hacked",
-        "was not hacked",
-        "has not been hacked",
-        "never hacked",
-        "no security breach",
-        "no data breach",
-        "not a fraud",
-        "no unauthorized access",
-    ]
-
     has_negated_security_keyword = any(
         phrase in description
-        for phrase in negation_phrases
+        for phrase in SECURITY_NEGATION_PHRASES
     )
 
     has_security_keyword = any(
         keyword in description
-        for keyword in security_keywords
+        for keyword in SECURITY_KEYWORDS
     )
 
     has_independent_high_priority_keyword = any(
         keyword in description
-        for keyword in independent_high_priority_keywords
+        for keyword in INDEPENDENT_HIGH_PRIORITY_KEYWORDS
     )
 
-    # An independent urgent incident remains High even when
-    # a separate security incident is explicitly negated.
+    # Independent urgent incidents take precedence.
+    # Security keywords trigger High unless a configured
+    # security-negation phrase is present.
     has_high_priority_keyword = (
         has_independent_high_priority_keyword
         or (
@@ -182,7 +182,7 @@ def classify_priority(request: PriorityRequest):
 
     elif any(
         keyword in description
-        for keyword in medium_priority_keywords
+        for keyword in MEDIUM_PRIORITY_KEYWORDS
     ):
         priority = "Medium"
         reason = "The ticket contains a moderate-urgency keyword."
