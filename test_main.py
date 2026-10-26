@@ -3,8 +3,13 @@ from fastapi.testclient import TestClient
 
 from main import app
 
+
 client = TestClient(app)
 
+
+# --------------------------------------------------
+# Health endpoints
+# --------------------------------------------------
 
 def test_health_endpoint():
     response = client.get("/health")
@@ -19,6 +24,10 @@ def test_model_health_endpoint():
     assert response.status_code == 200
     assert response.json()["model_loaded"] is True
 
+
+# --------------------------------------------------
+# Escalation prediction
+# --------------------------------------------------
 
 def test_predict_endpoint():
     response = client.post(
@@ -56,7 +65,7 @@ def test_predict_rejects_long_description():
     )
 
     assert response.status_code == 422
-    
+
 
 def test_predict_rejects_missing_description():
     response = client.post(
@@ -65,7 +74,7 @@ def test_predict_rejects_missing_description():
     )
 
     assert response.status_code == 422
-    
+
 
 def test_predict_rejects_whitespace_only_description():
     response = client.post(
@@ -90,7 +99,7 @@ def test_predict_trims_description_whitespace():
     assert response.json()["issue_description"] == (
         "I was charged twice for my subscription."
     )
-    
+
 
 def test_predict_probability_is_rounded_to_four_decimals():
     response = client.post(
@@ -134,6 +143,11 @@ def test_prediction_matches_probability_threshold():
     else:
         assert prediction == "No"
 
+
+# --------------------------------------------------
+# Priority classification: High
+# --------------------------------------------------
+
 def test_priority_endpoint_classifies_hacked_account_as_high():
     response = client.post(
         "/priority",
@@ -154,6 +168,165 @@ def test_priority_endpoint_classifies_hacked_account_as_high():
         "Rule-based keyword matching"
     )
 
+
+def test_priority_endpoint_still_flags_genuine_security_breach_as_high():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "There has been a security breach "
+                "and customer data was exposed."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "High"
+
+
+def test_priority_endpoint_flags_service_outage_despite_negated_breach():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "There was no data breach, "
+                "but the entire service is down."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "High"
+
+
+def test_priority_endpoint_classifies_unavailable_service_as_high():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "The service is unavailable for all customers."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "High"
+
+
+def test_priority_endpoint_classifies_platform_down_as_high():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "The platform is down for everyone."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "High"
+
+
+def test_priority_endpoint_classifies_customers_unable_to_use_service_as_high():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "Customers are unable to use the service."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "High"
+
+
+def test_priority_endpoint_prefers_high_over_medium_signals():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "The service is unavailable and I was charged twice."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "High"
+
+
+def test_priority_endpoint_classifies_team_unable_to_access_application_as_high():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "Our team cannot access the application."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "High"
+
+
+# --------------------------------------------------
+# New regression tests: outage wording
+# --------------------------------------------------
+
+def test_priority_endpoint_classifies_completely_down_service_as_high():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "The service is completely down and no customers "
+                "can access the platform."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+
+    result = response.json()
+
+    assert result["priority"] == "High"
+    assert result["reason"] == (
+        "The ticket describes a high-urgency incident "
+        "or service disruption."
+    )
+
+
+def test_priority_endpoint_classifies_no_customers_accessing_platform_as_high():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "No customers can access the platform."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "High"
+
+
+def test_priority_endpoint_handles_punctuation_and_case_in_outage():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "URGENT!!! The service is completely down!!!"
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "High"
+
+
+# --------------------------------------------------
+# Priority classification: Medium
+# --------------------------------------------------
+
 def test_priority_endpoint_classifies_billing_issue_as_medium():
     response = client.post(
         "/priority",
@@ -168,6 +341,40 @@ def test_priority_endpoint_classifies_billing_issue_as_medium():
     assert response.status_code == 200
     assert response.json()["priority"] == "Medium"
 
+
+def test_priority_endpoint_classifies_double_charge_as_medium():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "I was charged twice for my subscription, "
+                "and the payment is still pending."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "Medium"
+
+
+def test_priority_endpoint_classifies_refund_request_as_medium():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "I am waiting for a refund on my recent order."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "Medium"
+
+
+# --------------------------------------------------
+# Priority classification: Low
+# --------------------------------------------------
+
 def test_priority_endpoint_classifies_profile_question_as_low():
     response = client.post(
         "/priority",
@@ -180,6 +387,71 @@ def test_priority_endpoint_classifies_profile_question_as_low():
 
     assert response.status_code == 200
     assert response.json()["priority"] == "Low"
+
+
+def test_priority_endpoint_does_not_flag_negated_hacking_as_high():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "My account was not hacked. "
+                "I just want to update my profile."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "Low"
+
+
+def test_priority_endpoint_does_not_flag_no_data_breach_as_high():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "There was no data breach. "
+                "I only need help updating my profile."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "Low"
+
+
+def test_priority_endpoint_does_not_flag_platform_not_down_as_high():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "The platform is not down; I have a question "
+                "about my profile."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "Low"
+
+
+# --------------------------------------------------
+# Priority classification: negation and validation
+# --------------------------------------------------
+
+def test_priority_endpoint_classifies_negated_security_with_billing_as_medium():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "My account was not hacked, but I was "
+                "charged twice and need a refund."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "Medium"
+
 
 def test_priority_endpoint_rejects_short_description():
     response = client.post(
@@ -198,6 +470,7 @@ def test_priority_endpoint_rejects_long_description():
 
     assert response.status_code == 422
 
+
 def test_priority_endpoint_rejects_missing_description():
     response = client.post(
         "/priority",
@@ -206,6 +479,7 @@ def test_priority_endpoint_rejects_missing_description():
 
     assert response.status_code == 422
 
+
 def test_priority_endpoint_rejects_whitespace_only_description():
     response = client.post(
         "/priority",
@@ -213,173 +487,3 @@ def test_priority_endpoint_rejects_whitespace_only_description():
     )
 
     assert response.status_code == 422
-def test_priority_endpoint_does_not_flag_negated_hacking_as_high():
-    response = client.post(
-        "/priority",
-        json={
-            "issue_description": (
-                "My account was not hacked. "
-                "I just want to update my profile."
-            )
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json()["priority"] == "Low"
-    
-
-def test_priority_endpoint_still_flags_genuine_security_breach_as_high():
-    response = client.post(
-        "/priority",
-        json={
-            "issue_description": (
-                "There has been a security breach "
-                "and customer data was exposed."
-            )
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json()["priority"] == "High"
-
-def test_priority_endpoint_classifies_negated_security_with_billing_as_medium():
-    response = client.post(
-        "/priority",
-        json={
-            "issue_description": (
-                "My account was not hacked, but I was "
-                "charged twice and need a refund."
-            )
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json()["priority"] == "Medium"
-
-def test_priority_endpoint_does_not_flag_no_data_breach_as_high():
-    response = client.post(
-        "/priority",
-        json={
-            "issue_description": (
-                "There was no data breach. "
-                "I only need help updating my profile."
-            )
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json()["priority"] == "Low"
-def test_priority_endpoint_flags_service_outage_despite_negated_breach():
-    response = client.post(
-        "/priority",
-        json={
-            "issue_description": (
-                "There was no data breach, "
-                "but the entire service is down."
-            )
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json()["priority"] == "High"
-    
-def test_priority_endpoint_classifies_unavailable_service_as_high():
-    response = client.post(
-        "/priority",
-        json={
-            "issue_description": (
-                "The service is unavailable for all customers."
-            )
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json()["priority"] == "High"
-def test_priority_endpoint_classifies_platform_down_as_high():
-    response = client.post(
-        "/priority",
-        json={
-            "issue_description": (
-                "The platform is down for everyone."
-            )
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json()["priority"] == "High"   
-def test_priority_endpoint_does_not_flag_platform_not_down_as_high():
-    response = client.post(
-        "/priority",
-        json={
-            "issue_description": (
-                "The platform is not down; I have a question "
-                "about my profile."
-            )
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json()["priority"] == "Low"   
-    
-def test_priority_endpoint_classifies_customers_unable_to_use_service_as_high():
-    response = client.post(
-        "/priority",
-        json={
-            "issue_description": (
-                "Customers are unable to use the service."
-            )
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json()["priority"] == "High"
-def test_priority_endpoint_prefers_high_over_medium_signals():
-    response = client.post(
-        "/priority",
-        json={
-            "issue_description": (
-                "The service is unavailable and I was charged twice."
-            )
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json()["priority"] == "High"
-def test_priority_endpoint_classifies_team_unable_to_access_application_as_high():
-    response = client.post(
-        "/priority",
-        json={
-            "issue_description": (
-                "Our team cannot access the application."
-            )
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json()["priority"] == "High"
-
-def test_priority_endpoint_classifies_double_charge_as_medium():
-    response = client.post(
-        "/priority",
-        json={
-            "issue_description": (
-                "I was charged twice for my subscription, "
-                "and the payment is still pending."
-            )
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json()["priority"] == "Medium"
-def test_priority_endpoint_classifies_refund_request_as_medium():
-    response = client.post(
-        "/priority",
-        json={
-            "issue_description": (
-                "I am waiting for a refund on my recent order."
-            )
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json()["priority"] == "Medium"

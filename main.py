@@ -1,5 +1,5 @@
-
 from pathlib import Path
+import re
 
 import joblib
 from fastapi import FastAPI
@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 app = FastAPI(
     title="ResolveAI API",
     description="AI-powered customer operations copilot",
-    version="0.2.0",
+    version="0.3.0",
 )
 
 
@@ -25,6 +25,8 @@ model = joblib.load(MODEL_PATH)
 
 
 # 3. Priority classification rules
+
+# Security-related incidents
 SECURITY_KEYWORDS = [
     "security breach",
     "data breach",
@@ -36,28 +38,53 @@ SECURITY_KEYWORDS = [
     "payment stolen",
 ]
 
+# Independent high-priority incidents, including service outages
 INDEPENDENT_HIGH_PRIORITY_KEYWORDS = [
     "service outage",
     "service is down",
+    "service down",
+    "service is completely down",
+    "service completely down",
     "service is unavailable",
+    "service unavailable",
     "system down",
+    "system is down",
     "platform is down",
+    "platform down",
+    "platform is completely down",
+    "platform completely down",
+    "no customers can access the platform",
+    "customers cannot access the platform",
+    "customers can't access the platform",
+    "nobody can access the platform",
+    "no one can access the platform",
+    "the entire platform is down",
+    "entire platform down",
+    "complete outage",
+    "major outage",
+    "all users are affected",
     "unable to use the service",
+    "cannot use the service",
+    "can't use the service",
     "cannot access the application",
+    "can't access the application",
     "cannot access my account",
 ]
 
+# Moderate-priority incidents
 MEDIUM_PRIORITY_KEYWORDS = [
     "refund",
     "charged twice",
     "payment failed",
     "billing issue",
     "unable to log in",
+    "unable to login",
     "login issue",
     "order delayed",
     "subscription cancelled",
 ]
 
+# Basic security-negation phrases
 SECURITY_NEGATION_PHRASES = [
     "not hacked",
     "was not hacked",
@@ -70,7 +97,16 @@ SECURITY_NEGATION_PHRASES = [
 ]
 
 
-# 4. Shared validation for ticket descriptions
+# 4. Normalize text for keyword matching
+def normalize_text(text: str) -> str:
+    """Normalize case, whitespace, and punctuation for matching."""
+    text = text.lower()
+    text = re.sub(r"[^\w\s']", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+# 5. Shared validation for ticket descriptions
 class TicketRequest(BaseModel):
     issue_description: str = Field(
         min_length=5,
@@ -91,12 +127,11 @@ class TicketRequest(BaseModel):
         return value
 
 
-# Separate request schema for priority classification
 class PriorityRequest(TicketRequest):
     pass
 
 
-# 5. Check whether the API is running
+# 6. Check whether the API is running
 @app.get("/health")
 def health_check():
     return {
@@ -105,7 +140,7 @@ def health_check():
     }
 
 
-# 6. Check whether the ML model is loaded
+# 7. Check whether the ML model is loaded
 @app.get("/model-health")
 def model_health_check():
     return {
@@ -114,7 +149,7 @@ def model_health_check():
     }
 
 
-# 7. Predict whether a ticket may require escalation
+# 8. Predict whether a ticket may require escalation
 @app.post("/predict")
 def predict_escalation(request: TicketRequest):
     description = request.issue_description
@@ -145,11 +180,12 @@ def predict_escalation(request: TicketRequest):
     }
 
 
-# 8. Classify ticket priority using local rules
+# 9. Classify ticket priority using local rules
 @app.post("/priority")
 def classify_priority(request: PriorityRequest):
-    description = request.issue_description.lower()
+    description = normalize_text(request.issue_description)
 
+    # Check for a configured security-negation phrase
     has_negated_security_keyword = any(
         phrase in description
         for phrase in SECURITY_NEGATION_PHRASES
@@ -160,14 +196,12 @@ def classify_priority(request: PriorityRequest):
         for keyword in SECURITY_KEYWORDS
     )
 
+    # Independent urgent incidents always take precedence
     has_independent_high_priority_keyword = any(
         keyword in description
         for keyword in INDEPENDENT_HIGH_PRIORITY_KEYWORDS
     )
 
-    # Independent urgent incidents take precedence.
-    # Security keywords trigger High unless a configured
-    # security-negation phrase is present.
     has_high_priority_keyword = (
         has_independent_high_priority_keyword
         or (
@@ -178,14 +212,19 @@ def classify_priority(request: PriorityRequest):
 
     if has_high_priority_keyword:
         priority = "High"
-        reason = "The ticket contains a high-urgency keyword."
+        reason = (
+            "The ticket describes a high-urgency incident "
+            "or service disruption."
+        )
 
     elif any(
         keyword in description
         for keyword in MEDIUM_PRIORITY_KEYWORDS
     ):
         priority = "Medium"
-        reason = "The ticket contains a moderate-urgency keyword."
+        reason = (
+            "The ticket contains a moderate-urgency keyword."
+        )
 
     else:
         priority = "Low"
