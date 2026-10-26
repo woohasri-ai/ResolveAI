@@ -371,3 +371,15 @@ def test_priority_endpoint_classifies_double_charge_as_medium():
 
     assert response.status_code == 200
     assert response.json()["priority"] == "Medium"
+def test_priority_endpoint_classifies_refund_request_as_medium():
+    response = client.post(
+        "/priority",
+        json={
+            "issue_description": (
+                "I am waiting for a refund on my recent order."
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["priority"] == "Medium"
